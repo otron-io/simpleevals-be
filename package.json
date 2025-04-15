@@ -1,0 +1,27 @@
+{
+  "name": "simpleevals",
+  "version": "1.0.0",
+  "description": "Simple AI evaluation tool",
+  "scripts": {
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "start:frontend": "cd frontend && npm run build && npm run preview",
+    "start:backend": "cd backend && npm start",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
+  },
+  "keywords": [
+    "ai",
+    "evaluation",
+    "testing"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "claude": "^0.0.1"
+  }
+}
