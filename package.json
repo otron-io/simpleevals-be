@@ -1,27 +1,33 @@
 {
-  "name": "simpleevals",
+  "name": "simpleevals-be",
   "version": "1.0.0",
-  "description": "Simple AI evaluation tool",
+  "description": "Backend for SimpleEvals AI evaluation tool",
+  "main": "src/index.js",
   "scripts": {
-    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "start:frontend": "cd frontend && npm run build && npm run preview",
-    "start:backend": "cd backend && npm start",
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && npm run dev",
-    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
     "ai",
     "evaluation",
-    "testing"
+    "testing",
+    "backend"
   ],
-  "author": "",
+  "author": "Arnasltlt",
   "license": "MIT",
-  "devDependencies": {
-    "concurrently": "^8.2.2"
-  },
   "dependencies": {
-    "claude": "^0.0.1"
+    "@anthropic-ai/sdk": "^0.18.0",
+    "@google/generative-ai": "^0.2.1",
+    "@supabase/supabase-js": "^2.39.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "express-rate-limit": "^7.1.5",
+    "memory-cache": "^0.2.0",
+    "openai": "^4.30.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }
