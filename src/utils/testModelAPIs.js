@@ -85,11 +85,25 @@ const testGemini = async () => {
     console.log(`Available models: ${models ? 'Yes' : 'No'}`);
     
     // Generate content with simplest model
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: TEST_QUESTION }] }],
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-2.5-pro-preview-03-25",
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+      }
     });
+    
+    const chat = model.startChat({
+      history: [],
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        }
+      ]
+    });
+    
+    const result = await chat.sendMessage(TEST_QUESTION);
     
     console.log("✅ Google Gemini API connection successful!");
     console.log(`Response: "${result.response.text()}"`);

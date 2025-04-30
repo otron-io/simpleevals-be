@@ -8,13 +8,13 @@ const { createClient } = require('@supabase/supabase-js');
 const evaluationsStore = {
     // Map to store evaluation sets by ID
     items: new Map(),
-    
+
     // Generate a unique ID for a new evaluation set
     generateId: () => {
         return Math.random().toString(36).substring(2, 15) + 
                Math.random().toString(36).substring(2, 15);
     },
-    
+
     // Create a new evaluation set
     create: (data) => {
         const id = evaluationsStore.generateId();
@@ -28,27 +28,27 @@ const evaluationsStore = {
         evaluationsStore.items.set(id, newItem);
         return newItem;
     },
-    
+
     // Get an evaluation set by ID
     get: (id) => {
         return evaluationsStore.items.get(id);
     },
-    
+
     // Add a question to an existing evaluation set
     addQuestion: (setId, questionData) => {
         const set = evaluationsStore.items.get(setId);
         if (!set) return null;
-        
+
         set.questions.push({
             ...questionData,
             timestamp: new Date().toISOString()
         });
-        
+
         // Update the set in the store
         evaluationsStore.items.set(setId, set);
         return set;
     },
-    
+
     // Get all evaluation sets (limited to most recent for now)
     getAll: (limit = 50) => {
         const items = Array.from(evaluationsStore.items.values());
@@ -67,7 +67,9 @@ const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY, {
+    apiEndpoint: process.env.VERTEX_API_ENDPOINT // Optional: For VertexAI endpoint
+});
 
 // Supabase client setup
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -125,12 +127,12 @@ const getModelResponse = async (modelName, question) => {
                 console.error('ANTHROPIC_API_KEY is not set in environment variables');
                 return "Error: Anthropic API key is missing";
             }
-            
+
             // Initialize client with explicit apiKey param
             const claudeClient = new Anthropic({
                 apiKey: process.env.ANTHROPIC_API_KEY.trim()
             });
-            
+
             // Use only the stable model without preview features
             const response = await claudeClient.messages.create({
                 model: "claude-3-opus-20240229", // Stable, widely available model
@@ -148,11 +150,11 @@ const getModelResponse = async (modelName, question) => {
         }
     } else if (modelName === 'gemini') {
         try {
-            // Initialize the model with stable Gemini version
+            // Initialize the model with specified Gemini version
             const model = genAI.getGenerativeModel({
-                model: "gemini-1.5-pro" // Stable, widely available model
+                model: "gemini-2.5-pro-preview-03-25" // Use specified Gemini model
             });
-            
+
             // Use simple generateContent instead of chat for compatibility
             const result = await model.generateContent({
                 contents: [{ role: "user", parts: [{ text: question }] }],
@@ -219,7 +221,7 @@ exports.evaluateModels = async (req, res) => {
             const response = await getModelResponse(modelName, question);
             console.log(`Evaluating response from ${modelName}...`);
             const evaluation = await evaluateResponse(question, referenceAnswer, response);
-            
+
             const modelDisplayNames = {
                 gpt4o: 'GPT-4.1',
                 gpt41: 'GPT-4.1',
@@ -233,7 +235,7 @@ exports.evaluateModels = async (req, res) => {
                 evaluation: evaluation
             });
         }
-        
+
         // Store the evaluation in our data store
         const questionData = {
             question,
@@ -241,9 +243,9 @@ exports.evaluateModels = async (req, res) => {
             results,
             timestamp: new Date().toISOString()
         };
-        
+
         let evalSet;
-        
+
         // Either add to existing set or create new one
         if (evalSetId) {
             evalSet = evaluationsStore.addQuestion(evalSetId, questionData);
@@ -257,7 +259,7 @@ exports.evaluateModels = async (req, res) => {
                 questions: [questionData]
             });
         }
-        
+
         // Return results along with the evaluation set ID
         res.json({
             results,
@@ -273,17 +275,17 @@ exports.evaluateModels = async (req, res) => {
 // Get an evaluation set by ID
 exports.getEvaluationSet = (req, res) => {
     const { id } = req.params;
-    
+
     if (!id) {
         return res.status(400).json({ message: "Missing evaluation set ID" });
     }
-    
+
     const evalSet = evaluationsStore.get(id);
-    
+
     if (!evalSet) {
         return res.status(404).json({ message: "Evaluation set not found" });
     }
-    
+
     res.json(evalSet);
 };
 
@@ -359,7 +361,7 @@ exports.evaluateSet = async (req, res) => {
             models,
             questions: []
         });
-        
+
         // Process each question
         for (const q of questions) {
             const { question, referenceAnswer } = q;
@@ -374,13 +376,13 @@ exports.evaluateSet = async (req, res) => {
                 const response = await getModelResponse(modelName, question);
                 const responseEndTime = performance.now();
                 const responseTime = Math.round(responseEndTime - responseStartTime);
-                
+
                 // Measure evaluation time
                 const evalStartTime = performance.now();
                 const evaluation = await evaluateResponse(question, referenceAnswer, response);
                 const evalEndTime = performance.now();
                 const evalTime = Math.round(evalEndTime - evalStartTime);
-                
+
                 const modelDisplayNames = {
                     gpt4o: 'GPT-4.1',
                     gpt41: 'GPT-4.1',
@@ -422,4 +424,4 @@ exports.evaluateSet = async (req, res) => {
         console.error('Error during evaluation:', err);
         res.status(500).json({ message: 'Failed to evaluate questions' });
     }
-}; 
+};
