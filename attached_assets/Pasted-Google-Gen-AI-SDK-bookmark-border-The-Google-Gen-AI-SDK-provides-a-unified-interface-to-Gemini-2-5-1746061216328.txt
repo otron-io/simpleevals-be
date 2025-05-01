@@ -1,0 +1,75 @@
+Google Gen AI SDK 
+
+bookmark_border
+The Google Gen AI SDK provides a unified interface to Gemini 2.5 Pro and Gemini 2.0 models through both the Gemini Developer API and the Gemini API on Vertex AI. With a few exceptions, code that runs on one platform will run on both. This means that you can prototype an application using the Developer API and then migrate the application to Vertex AI without rewriting your code.
+
+To see an example of the Google Gen AI SDK, run the "Intro to the Google Gen AI SDK" Jupyter notebook in one of the following environments:
+
+Open in Colab | Open in Colab Enterprise | Open in Vertex AI Workbench user-managed notebooks | View on GitHub
+
+Gen AI SDK for Python
+Gen AI SDK for Go
+Gen AI SDK for Node.js
+Gen AI SDK for Java
+The Google Gen AI SDK for Python is available on PyPI and GitHub:
+
+google-genai on PyPI
+python-genai on GitHub
+To learn more, see the Python SDK reference.
+
+Install
+
+
+pip install --upgrade google-genai
+Set environment variables to use the Gen AI SDK with Vertex AI:
+
+
+
+# Replace the `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` values
+# with appropriate values for your project.
+export GOOGLE_CLOUD_PROJECT=GOOGLE_CLOUD_PROJECT
+export GOOGLE_CLOUD_LOCATION=us-central1
+export GOOGLE_GENAI_USE_VERTEXAI=True
+Quickstart
+Choose one of the following options, depending on whether you're using Vertex AI in express mode or not.
+
+Use Vertex AI (with all Google Cloud capabilities and services)
+
+
+
+from google import genai
+from google.genai.types import HttpOptions
+
+client = genai.Client(http_options=HttpOptions(api_version="v1"))
+response = client.models.generate_content(
+    model="gemini-2.0-flash-001",
+    contents="How does AI work?",
+)
+print(response.text)
+# Example response:
+# Okay, let's break down how AI works. It's a broad field, so I'll focus on the ...
+#
+# Here's a simplified overview:
+# ...
+Use Vertex AI in express mode
+
+
+
+from google import genai
+
+# TODO(developer): Update below line
+API_KEY = "YOUR_API_KEY"
+
+client = genai.Client(vertexai=True, api_key=API_KEY)
+
+response = client.models.generate_content(
+    model="gemini-2.0-flash-001",
+    contents="Explain bubble sort to me.",
+)
+
+print(response.text)
+# Example response:
+# Bubble Sort is a simple sorting algorithm that repeatedly steps through the list
+Was this helpful?
+
+Send feedback
