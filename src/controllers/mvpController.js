@@ -67,8 +67,12 @@ const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY, {
-    apiEndpoint: process.env.VERTEX_API_ENDPOINT // Optional: For VertexAI endpoint
+const genAI = new GoogleGenerativeAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    projectId: process.env.GOOGLE_CLOUD_PROJECT,
+    location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
+    apiEndpoint: process.env.VERTEX_API_ENDPOINT || "us-central1-aiplatform.googleapis.com",
+    vertexai: true
 });
 
 // Supabase client setup

@@ -77,7 +77,13 @@ const testAnthropic = async () => {
 const testGemini = async () => {
   try {
     console.log("🔍 Testing Google Gemini API connection...");
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = new GoogleGenerativeAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      projectId: process.env.GOOGLE_CLOUD_PROJECT,
+      location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
+      apiEndpoint: process.env.VERTEX_API_ENDPOINT || "us-central1-aiplatform.googleapis.com",
+      vertexai: true
+    });
     
     // Try to list available models first to check credentials
     console.log("Checking available Gemini models...");
