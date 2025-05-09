@@ -23,7 +23,7 @@ const testOpenAI = async () => {
 
     // Test first without system message
     const completion1 = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // Using a simpler model for testing
+      model: "gpt-4.1", // Use the same model as in production
       messages: [{ role: "user", content: TEST_QUESTION }],
     });
 
@@ -32,7 +32,7 @@ const testOpenAI = async () => {
 
     // Test with system message
     const completion2 = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // Using a simpler model for testing
+      model: "gpt-4.1", // Use the same model as in production
       messages: [
         { role: "system", content: TEST_SYSTEM_MESSAGE },
         { role: "user", content: TEST_QUESTION }
@@ -60,7 +60,7 @@ const testAnthropic = async () => {
 
     // Test first without system message
     const response1 = await anthropic.messages.create({
-      model: "claude-3-haiku-20240307", // Using the simplest model for testing
+      model: "claude-3-7-sonnet-latest", // Use the same model as in production
       max_tokens: 100,
       messages: [
         { role: "user", content: TEST_QUESTION }
@@ -72,7 +72,7 @@ const testAnthropic = async () => {
 
     // Test with system message
     const response2 = await anthropic.messages.create({
-      model: "claude-3-haiku-20240307", // Using the simplest model for testing
+      model: "claude-3-7-sonnet-latest", // Use the same model as in production
       max_tokens: 100,
       messages: [
         { role: "system", content: TEST_SYSTEM_MESSAGE },
@@ -109,11 +109,11 @@ const testGemini = async () => {
 
     // Try to list available models first to check credentials
     console.log("Checking available Gemini models...");
-    const models = await genAI.getGenerativeModel({ model: "gemini-1.5-flash" }).listModels();
+    const models = await genAI.getGenerativeModel({ model: "gemini-2.5-pro-preview-03-25" }).listModels();
     console.log(`Available models: ${models ? 'Yes' : 'No'}`);
 
     // Generate content with simplest model without system message
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro-preview-03-25" });
 
     const result1 = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: TEST_QUESTION }] }],
@@ -140,7 +140,7 @@ const testGemini = async () => {
 
     if (error.message && error.message.includes("not found")) {
       console.error("Model not found. Try using a different model.");
-      console.error("Common Gemini models: gemini-1.5-flash, gemini-1.5-pro");
+      console.error("Check that your API key has access to Gemini 2.5 models");
     }
     return false;
   }
