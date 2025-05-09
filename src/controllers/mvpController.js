@@ -105,13 +105,22 @@ Your evaluation must be strict but fair, focusing only on correctness of informa
 `;
 
 // Function to get response from a model (starting with OpenAI)
-const getModelResponse = async (modelName, question) => {
+const getModelResponse = async (modelName, question, systemMessage = '') => {
     if (modelName === 'gpt4o' || modelName === 'gpt41') {
         try {
+            const messages = [];
+
+            // Add system message if provided
+            if (systemMessage) {
+                messages.push({ role: "system", content: systemMessage });
+            }
+
+            // Add user message
+            messages.push({ role: "user", content: question });
+
             const completion = await openai.chat.completions.create({
                 model: "gpt-4.1", // Use GPT-4.1 for user-facing evaluation
-                messages: [{ role: "user", content: question }],
-                temperature: 0.7, // Adjust as needed
+                messages: messages
             });
             return completion.choices[0].message.content.trim();
         } catch (error) {
@@ -125,20 +134,27 @@ const getModelResponse = async (modelName, question) => {
                 console.error('ANTHROPIC_API_KEY is not set in environment variables');
                 return "Error: Anthropic API key is missing";
             }
-            
+
             // Initialize client with explicit apiKey param
             const claudeClient = new Anthropic({
                 apiKey: process.env.ANTHROPIC_API_KEY.trim()
             });
-            
+
+            const messages = [];
+
+            // Add system message if provided
+            if (systemMessage) {
+                messages.push({ role: "system", content: systemMessage });
+            }
+
+            // Add user message
+            messages.push({ role: "user", content: question });
+
             // Use only the stable model without preview features
             const response = await claudeClient.messages.create({
-                model: "claude-3-opus-20240229", // Stable, widely available model
+                model: "claude-3-7-sonnet-latest", // Use the latest Claude 3.7 Sonnet model
                 max_tokens: 1000,
-                temperature: 0.7,
-                messages: [
-                    { role: "user", content: question }
-                ]
+                messages: messages
                 // Removed thinking parameter as it may not be widely supported
             });
             return response.content[0].text;
@@ -150,15 +166,22 @@ const getModelResponse = async (modelName, question) => {
         try {
             // Initialize the model with stable Gemini version
             const model = genAI.getGenerativeModel({
-                model: "gemini-1.5-pro" // Stable, widely available model
+                model: "gemini-2.5-pro-preview-03-25" // Use Gemini 2.5 Pro preview model
             });
-            
+
+            const contents = [];
+
+            // Add system message if provided
+            if (systemMessage) {
+                contents.push({ role: "system", parts: [{ text: systemMessage }] });
+            }
+
+            // Add user message
+            contents.push({ role: "user", parts: [{ text: question }] });
+
             // Use simple generateContent instead of chat for compatibility
             const result = await model.generateContent({
-                contents: [{ role: "user", parts: [{ text: question }] }],
-                generationConfig: {
-                    temperature: 0.7,
-                }
+                contents: contents
             });
             return result.response.text();
         } catch (error) {
@@ -182,8 +205,7 @@ const evaluateResponse = async (question, referenceAnswer, modelResponse) => {
         const completion = await openai.chat.completions.create({
             model: "gpt-4.1-mini", // Using GPT-4.1-mini as the judge
             messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" }, // Ensure JSON output
-            temperature: 0.2, // Lower temperature for more deterministic evaluation
+            response_format: { type: "json_object" } // Ensure JSON output
         });
         const evaluationResult = JSON.parse(completion.choices[0].message.content);
         return evaluationResult; // Should match { is_correct: boolean, reasoning: string }
@@ -196,7 +218,7 @@ const evaluateResponse = async (question, referenceAnswer, modelResponse) => {
 // Controller function for the /evaluate endpoint
 // Create a new evaluation set or add to existing one
 exports.evaluateModels = async (req, res) => {
-    const { question, referenceAnswer, models, evalSetId } = req.body;
+    const { question, referenceAnswer, models, evalSetId, systemMessage } = req.body;
 
     if (!question || !referenceAnswer || !models) {
         return res.status(400).json({ message: "Missing required fields: question, referenceAnswer, models" });
@@ -211,15 +233,18 @@ exports.evaluateModels = async (req, res) => {
     }
 
     console.log(`Evaluating question: "${question}" for models: ${selectedModels.join(', ')}`);
+    if (systemMessage) {
+        console.log(`Using system message: "${systemMessage}"`);
+    }
 
     try {
         const results = [];
         for (const modelName of selectedModels) {
             console.log(`Getting response from ${modelName}...`);
-            const response = await getModelResponse(modelName, question);
+            const response = await getModelResponse(modelName, question, systemMessage);
             console.log(`Evaluating response from ${modelName}...`);
             const evaluation = await evaluateResponse(question, referenceAnswer, response);
-            
+
             const modelDisplayNames = {
                 gpt4o: 'GPT-4.1',
                 gpt41: 'GPT-4.1',
@@ -233,17 +258,18 @@ exports.evaluateModels = async (req, res) => {
                 evaluation: evaluation
             });
         }
-        
+
         // Store the evaluation in our data store
         const questionData = {
             question,
             referenceAnswer,
+            systemMessage, // Store the system message
             results,
             timestamp: new Date().toISOString()
         };
-        
+
         let evalSet;
-        
+
         // Either add to existing set or create new one
         if (evalSetId) {
             evalSet = evaluationsStore.addQuestion(evalSetId, questionData);
@@ -252,12 +278,12 @@ exports.evaluateModels = async (req, res) => {
             }
         } else {
             // Create a new set with this as the first question
-            evalSet = evaluationsStore.create({ 
+            evalSet = evaluationsStore.create({
                 name: "Evaluation Set",
                 questions: [questionData]
             });
         }
-        
+
         // Return results along with the evaluation set ID
         res.json({
             results,
@@ -331,7 +357,7 @@ exports.getEvaluationSetById = async (req, res) => {
 
 // Evaluate a set of questions in batch mode
 exports.evaluateSet = async (req, res) => {
-    const { questions, models, setName } = req.body;
+    const { questions, models, setName, systemMessage } = req.body;
 
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return res.status(400).json({ message: "Missing or invalid questions array" });
@@ -352,14 +378,20 @@ exports.evaluateSet = async (req, res) => {
         }
     }
 
+    // Enforce character limit for system message if provided
+    if (systemMessage && systemMessage.length > 1000) {
+        return res.status(400).json({ message: "System message must be 1000 characters or fewer." });
+    }
+
     try {
         // Create a new evaluation set
         const evalSet = evaluationsStore.create({
             name: setName,
             models,
+            systemMessage, // Store system message at the set level
             questions: []
         });
-        
+
         // Process each question
         for (const q of questions) {
             const { question, referenceAnswer } = q;
@@ -371,20 +403,20 @@ exports.evaluateSet = async (req, res) => {
             for (const modelName of models) {
                 // Measure response time
                 const responseStartTime = performance.now();
-                const response = await getModelResponse(modelName, question);
+                const response = await getModelResponse(modelName, question, systemMessage);
                 const responseEndTime = performance.now();
                 const responseTime = Math.round(responseEndTime - responseStartTime);
-                
+
                 // Measure evaluation time
                 const evalStartTime = performance.now();
                 const evaluation = await evaluateResponse(question, referenceAnswer, response);
                 const evalEndTime = performance.now();
                 const evalTime = Math.round(evalEndTime - evalStartTime);
-                
+
                 const modelDisplayNames = {
                     gpt4o: 'GPT-4.1',
                     gpt41: 'GPT-4.1',
-                    claude3: 'Claude 3.7', 
+                    claude3: 'Claude 3.7',
                     gemini: 'Gemini 2.5'
                 };
                 results.push({
@@ -413,6 +445,7 @@ exports.evaluateSet = async (req, res) => {
         const supabaseId = await exports.saveEvaluationSetToSupabase({
             name: updatedEvalSet.name,
             models: updatedEvalSet.models,
+            systemMessage: updatedEvalSet.systemMessage,
             questions: updatedEvalSet.questions,
             results: updatedEvalSet,
             timestamp: updatedEvalSet.timestamp
