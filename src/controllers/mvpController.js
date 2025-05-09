@@ -153,7 +153,7 @@ const getModelResponse = async (modelName, question, systemMessage = '') => {
 
             // Use only the stable model without preview features
             const response = await claudeClient.messages.create({
-                model: "claude-3-opus-20240229", // Stable, widely available model
+                model: "claude-3-7-sonnet-latest", // Use the latest Claude 3.7 Sonnet model
                 max_tokens: 1000,
                 temperature: 0.7,
                 messages: messages
@@ -168,7 +168,7 @@ const getModelResponse = async (modelName, question, systemMessage = '') => {
         try {
             // Initialize the model with stable Gemini version
             const model = genAI.getGenerativeModel({
-                model: "gemini-1.5-pro" // Stable, widely available model
+                model: "gemini-2.5-pro-preview-03-25" // Use Gemini 2.5 Pro preview model
             });
 
             const contents = [];
