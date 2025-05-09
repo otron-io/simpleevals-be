@@ -120,8 +120,7 @@ const getModelResponse = async (modelName, question, systemMessage = '') => {
 
             const completion = await openai.chat.completions.create({
                 model: "gpt-4.1", // Use GPT-4.1 for user-facing evaluation
-                messages: messages,
-                temperature: 0.7, // Adjust as needed
+                messages: messages
             });
             return completion.choices[0].message.content.trim();
         } catch (error) {
@@ -155,7 +154,6 @@ const getModelResponse = async (modelName, question, systemMessage = '') => {
             const response = await claudeClient.messages.create({
                 model: "claude-3-7-sonnet-latest", // Use the latest Claude 3.7 Sonnet model
                 max_tokens: 1000,
-                temperature: 0.7,
                 messages: messages
                 // Removed thinking parameter as it may not be widely supported
             });
@@ -183,10 +181,7 @@ const getModelResponse = async (modelName, question, systemMessage = '') => {
 
             // Use simple generateContent instead of chat for compatibility
             const result = await model.generateContent({
-                contents: contents,
-                generationConfig: {
-                    temperature: 0.7,
-                }
+                contents: contents
             });
             return result.response.text();
         } catch (error) {
@@ -210,8 +205,7 @@ const evaluateResponse = async (question, referenceAnswer, modelResponse) => {
         const completion = await openai.chat.completions.create({
             model: "gpt-4.1-mini", // Using GPT-4.1-mini as the judge
             messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" }, // Ensure JSON output
-            temperature: 0.2, // Lower temperature for more deterministic evaluation
+            response_format: { type: "json_object" } // Ensure JSON output
         });
         const evaluationResult = JSON.parse(completion.choices[0].message.content);
         return evaluationResult; // Should match { is_correct: boolean, reasoning: string }
