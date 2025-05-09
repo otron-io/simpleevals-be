@@ -1,8 +1,8 @@
-const OpenAI = require('openai');
-const Anthropic = require('@anthropic-ai/sdk');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const memoryCache = require('memory-cache');
-const { createClient } = require('@supabase/supabase-js');
+const OpenAI = require("openai");
+const Anthropic = require("@anthropic-ai/sdk");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const memoryCache = require("memory-cache");
+const { createClient } = require("@supabase/supabase-js");
 
 // Simple in-memory storage for evaluations
 const evaluationsStore = {
@@ -11,8 +11,10 @@ const evaluationsStore = {
 
     // Generate a unique ID for a new evaluation set
     generateId: () => {
-        return Math.random().toString(36).substring(2, 15) + 
-               Math.random().toString(36).substring(2, 15);
+        return (
+            Math.random().toString(36).substring(2, 15) +
+            Math.random().toString(36).substring(2, 15)
+        );
     },
 
     // Create a new evaluation set
@@ -23,7 +25,7 @@ const evaluationsStore = {
             id,
             ...data,
             timestamp,
-            questions: data.questions || []
+            questions: data.questions || [],
         };
         evaluationsStore.items.set(id, newItem);
         return newItem;
@@ -41,7 +43,7 @@ const evaluationsStore = {
 
         set.questions.push({
             ...questionData,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
 
         // Update the set in the store
@@ -52,10 +54,10 @@ const evaluationsStore = {
     // Get all evaluation sets (limited to most recent for now)
     getAll: (limit = 50) => {
         const items = Array.from(evaluationsStore.items.values());
-        return items.sort((a, b) => 
-            new Date(b.timestamp) - new Date(a.timestamp)
-        ).slice(0, limit);
-    }
+        return items
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .slice(0, limit);
+    },
 };
 
 // Initialize API clients
@@ -71,12 +73,17 @@ const genAI = new GoogleGenerativeAI({
     apiKey: process.env.GEMINI_API_KEY,
     projectId: process.env.GOOGLE_CLOUD_PROJECT,
     location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
-    apiEndpoint: process.env.VERTEX_API_ENDPOINT || "us-central1-aiplatform.googleapis.com",
-    vertexai: true
+    apiEndpoint:
+        process.env.VERTEX_API_ENDPOINT ||
+        "us-central1-aiplatform.googleapis.com",
+    vertexai: true,
 });
 
 // Supabase client setup
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+);
 
 // Placeholder for the evaluator prompt from docs
 const evaluatorPromptTemplate = `
@@ -111,64 +118,96 @@ Your evaluation must be strict but fair, focusing only on correctness of informa
 `;
 
 // Function to get response from a model (starting with OpenAI)
-const getModelResponse = async (modelName, question) => {
-    if (modelName === 'gpt4o' || modelName === 'gpt41') {
+const getModelResponse = async (modelName, question, systemMessage = "") => {
+    if (modelName === "gpt4o" || modelName === "gpt41") {
         try {
+            const messages = [];
+
+            // Add system message if provided
+            if (systemMessage) {
+                messages.push({ role: "system", content: systemMessage });
+            }
+
+            // Add user message
+            messages.push({ role: "user", content: question });
+
             const completion = await openai.chat.completions.create({
                 model: "gpt-4.1", // Use GPT-4.1 for user-facing evaluation
-                messages: [{ role: "user", content: question }],
-                temperature: 0.7, // Adjust as needed
+                messages: messages,
             });
             return completion.choices[0].message.content.trim();
         } catch (error) {
             console.error(`Error calling OpenAI API for ${modelName}:`, error);
             return "Error getting response from OpenAI";
         }
-    } else if (modelName === 'claude3') {
+    } else if (modelName === "claude3") {
         try {
             // Check if API key is set
             if (!process.env.ANTHROPIC_API_KEY) {
-                console.error('ANTHROPIC_API_KEY is not set in environment variables');
+                console.error(
+                    "ANTHROPIC_API_KEY is not set in environment variables",
+                );
                 return "Error: Anthropic API key is missing";
             }
 
             // Initialize client with explicit apiKey param
             const claudeClient = new Anthropic({
-                apiKey: process.env.ANTHROPIC_API_KEY.trim()
+                apiKey: process.env.ANTHROPIC_API_KEY.trim(),
             });
 
+            const messages = [];
+
+            // Add system message if provided
+            if (systemMessage) {
+                messages.push({ role: "system", content: systemMessage });
+            }
+
+            // Add user message
+            messages.push({ role: "user", content: question });
             // Use only the stable model without preview features
             const response = await claudeClient.messages.create({
-                model: "claude-3-opus-20240229", // Stable, widely available model
+                model: "claude-3-7-sonnet-latest", // Use the latest Claude 3.7 Sonnet model
                 max_tokens: 1000,
-                temperature: 0.7,
-                messages: [
-                    { role: "user", content: question }
-                ]
+                messages: messages,
                 // Removed thinking parameter as it may not be widely supported
             });
             return response.content[0].text;
         } catch (error) {
-            console.error(`Error calling Anthropic API for ${modelName}:`, error);
+            console.error(
+                `Error calling Anthropic API for ${modelName}:`,
+                error,
+            );
             return `Error getting response from Claude: ${error.message}`;
         }
-    } else if (modelName === 'gemini') {
+    } else if (modelName === "gemini") {
         try {
             // Initialize the model with specified Gemini version
             const model = genAI.getGenerativeModel({
-                model: "gemini-2.5-pro-preview-03-25" // Use specified Gemini model
+                model: "gemini-2.5-pro-preview-03-25", // Use Gemini 2.5 Pro preview model
             });
 
+            const contents = [];
+
+            // Add system message if provided
+            if (systemMessage) {
+                contents.push({
+                    role: "system",
+                    parts: [{ text: systemMessage }],
+                });
+            }
+
+            // Add user message
+            contents.push({ role: "user", parts: [{ text: question }] });
             // Use simple generateContent instead of chat for compatibility
             const result = await model.generateContent({
-                contents: [{ role: "user", parts: [{ text: question }] }],
-                generationConfig: {
-                    temperature: 0.7,
-                }
+                contents: contents,
             });
             return result.response.text();
         } catch (error) {
-            console.error(`Error calling Google Gemini API for ${modelName}:`, error);
+            console.error(
+                `Error calling Google Gemini API for ${modelName}:`,
+                error,
+            );
             return `Error getting response from Gemini 2.5: ${error.message}`;
         }
     } else {
@@ -180,18 +219,19 @@ const getModelResponse = async (modelName, question) => {
 // Function to evaluate a response using LLM-as-judge (OpenAI)
 const evaluateResponse = async (question, referenceAnswer, modelResponse) => {
     const prompt = evaluatorPromptTemplate
-        .replace('{question}', question)
-        .replace('{reference_answer}', referenceAnswer)
-        .replace('{model_response}', modelResponse);
+        .replace("{question}", question)
+        .replace("{reference_answer}", referenceAnswer)
+        .replace("{model_response}", modelResponse);
 
     try {
         const completion = await openai.chat.completions.create({
             model: "gpt-4.1-mini", // Using GPT-4.1-mini as the judge
             messages: [{ role: "user", content: prompt }],
             response_format: { type: "json_object" }, // Ensure JSON output
-            temperature: 0.2, // Lower temperature for more deterministic evaluation
         });
-        const evaluationResult = JSON.parse(completion.choices[0].message.content);
+        const evaluationResult = JSON.parse(
+            completion.choices[0].message.content,
+        );
         return evaluationResult; // Should match { is_correct: boolean, reasoning: string }
     } catch (error) {
         console.error("Error calling OpenAI API for evaluation:", error);
@@ -202,10 +242,16 @@ const evaluateResponse = async (question, referenceAnswer, modelResponse) => {
 // Controller function for the /evaluate endpoint
 // Create a new evaluation set or add to existing one
 exports.evaluateModels = async (req, res) => {
-    const { question, referenceAnswer, models, evalSetId } = req.body;
+    const { question, referenceAnswer, models, evalSetId, systemMessage } =
+        req.body;
 
     if (!question || !referenceAnswer || !models) {
-        return res.status(400).json({ message: "Missing required fields: question, referenceAnswer, models" });
+        return res
+            .status(400)
+            .json({
+                message:
+                    "Missing required fields: question, referenceAnswer, models",
+            });
     }
 
     const selectedModels = Object.entries(models)
@@ -213,30 +259,45 @@ exports.evaluateModels = async (req, res) => {
         .map(([modelName, _]) => modelName);
 
     if (selectedModels.length === 0) {
-        return res.status(400).json({ message: "No models selected for evaluation." });
+        return res
+            .status(400)
+            .json({ message: "No models selected for evaluation." });
     }
 
-    console.log(`Evaluating question: "${question}" for models: ${selectedModels.join(', ')}`);
+    console.log(
+        `Evaluating question: "${question}" for models: ${selectedModels.join(", ")}`,
+    );
+    if (systemMessage) {
+        console.log(`Using system message: "${systemMessage}"`);
+    }
 
     try {
         const results = [];
         for (const modelName of selectedModels) {
             console.log(`Getting response from ${modelName}...`);
-            const response = await getModelResponse(modelName, question);
+            const response = await getModelResponse(
+                modelName,
+                question,
+                systemMessage,
+            );
             console.log(`Evaluating response from ${modelName}...`);
-            const evaluation = await evaluateResponse(question, referenceAnswer, response);
+            const evaluation = await evaluateResponse(
+                question,
+                referenceAnswer,
+                response,
+            );
 
             const modelDisplayNames = {
-                gpt4o: 'GPT-4.1',
-                gpt41: 'GPT-4.1',
-                claude3: 'Claude 3.7',
-                gemini: 'Gemini 2.5'
+                gpt4o: "GPT-4.1",
+                gpt41: "GPT-4.1",
+                claude3: "Claude 3.7",
+                gemini: "Gemini 2.5",
             };
 
             results.push({
                 model: modelDisplayNames[modelName] || modelName,
                 response: response,
-                evaluation: evaluation
+                evaluation: evaluation,
             });
         }
 
@@ -244,8 +305,9 @@ exports.evaluateModels = async (req, res) => {
         const questionData = {
             question,
             referenceAnswer,
+            systemMessage, // Store the system message
             results,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         };
 
         let evalSet;
@@ -254,13 +316,15 @@ exports.evaluateModels = async (req, res) => {
         if (evalSetId) {
             evalSet = evaluationsStore.addQuestion(evalSetId, questionData);
             if (!evalSet) {
-                return res.status(404).json({ message: "Evaluation set not found" });
+                return res
+                    .status(404)
+                    .json({ message: "Evaluation set not found" });
             }
         } else {
             // Create a new set with this as the first question
-            evalSet = evaluationsStore.create({ 
+            evalSet = evaluationsStore.create({
                 name: "Evaluation Set",
-                questions: [questionData]
+                questions: [questionData],
             });
         }
 
@@ -268,11 +332,13 @@ exports.evaluateModels = async (req, res) => {
         res.json({
             results,
             evalSetId: evalSet.id,
-            questionCount: evalSet.questions.length
+            questionCount: evalSet.questions.length,
         });
     } catch (error) {
         console.error("Error during model evaluation process:", error);
-        res.status(500).json({ message: "Internal server error during evaluation." });
+        res.status(500).json({
+            message: "Internal server error during evaluation.",
+        });
     }
 };
 
@@ -302,15 +368,15 @@ exports.getAllEvaluationSets = (req, res) => {
 // Save evaluation set to Supabase and return the new ID
 exports.saveEvaluationSetToSupabase = async (evaluationSet) => {
     const { data, error } = await supabase
-        .from('evaluations')
+        .from("evaluations")
         .insert({
             name: evaluationSet.name,
             models: evaluationSet.models || [],
             questions: evaluationSet.questions || [],
             results: evaluationSet.results || {},
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
         })
-        .select('id')
+        .select("id")
         .single();
     if (error) throw error;
     return data.id;
@@ -321,41 +387,66 @@ exports.getEvaluationSetById = async (req, res) => {
     const { id } = req.params;
     try {
         const { data, error } = await supabase
-            .from('evaluations')
-            .select('*')
-            .eq('id', id)
+            .from("evaluations")
+            .select("*")
+            .eq("id", id)
             .single();
         if (error || !data) {
-            return res.status(404).json({ message: 'Evaluation not found' });
+            return res.status(404).json({ message: "Evaluation not found" });
         }
         res.json(data);
     } catch (err) {
-        console.error('Error fetching evaluation from Supabase:', err);
-        res.status(500).json({ message: 'Failed to fetch evaluation from Supabase' });
+        console.error("Error fetching evaluation from Supabase:", err);
+        res.status(500).json({
+            message: "Failed to fetch evaluation from Supabase",
+        });
     }
 };
 
 // Evaluate a set of questions in batch mode
 exports.evaluateSet = async (req, res) => {
-    const { questions, models, setName } = req.body;
+    const { questions, models, setName, systemMessage } = req.body;
 
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        return res.status(400).json({ message: "Missing or invalid questions array" });
+        return res
+            .status(400)
+            .json({ message: "Missing or invalid questions array" });
     }
 
     if (!models || models.length === 0) {
-        return res.status(400).json({ message: "No models selected for evaluation" });
+        return res
+            .status(400)
+            .json({ message: "No models selected for evaluation" });
     }
 
     if (!setName) {
-        return res.status(400).json({ message: "Evaluation set name is required" });
+        return res
+            .status(400)
+            .json({ message: "Evaluation set name is required" });
     }
 
     // Enforce 500-character limit for question and referenceAnswer
     for (const q of questions) {
-        if ((q.question && q.question.length > 500) || (q.referenceAnswer && q.referenceAnswer.length > 500)) {
-            return res.status(400).json({ message: "Each question and reference answer must be 500 characters or fewer." });
+        if (
+            (q.question && q.question.length > 500) ||
+            (q.referenceAnswer && q.referenceAnswer.length > 500)
+        ) {
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Each question and reference answer must be 500 characters or fewer.",
+                });
         }
+    }
+
+    // Enforce character limit for system message if provided
+    if (systemMessage && systemMessage.length > 1000) {
+        return res
+            .status(400)
+            .json({
+                message: "System message must be 1000 characters or fewer.",
+            });
     }
 
     try {
@@ -363,7 +454,8 @@ exports.evaluateSet = async (req, res) => {
         const evalSet = evaluationsStore.create({
             name: setName,
             models,
-            questions: []
+            systemMessage, // Store system message at the set level
+            questions: [],
         });
 
         // Process each question
@@ -377,21 +469,31 @@ exports.evaluateSet = async (req, res) => {
             for (const modelName of models) {
                 // Measure response time
                 const responseStartTime = performance.now();
-                const response = await getModelResponse(modelName, question);
+                const response = await getModelResponse(
+                    modelName,
+                    question,
+                    systemMessage,
+                );
                 const responseEndTime = performance.now();
-                const responseTime = Math.round(responseEndTime - responseStartTime);
+                const responseTime = Math.round(
+                    responseEndTime - responseStartTime,
+                );
 
                 // Measure evaluation time
                 const evalStartTime = performance.now();
-                const evaluation = await evaluateResponse(question, referenceAnswer, response);
+                const evaluation = await evaluateResponse(
+                    question,
+                    referenceAnswer,
+                    response,
+                );
                 const evalEndTime = performance.now();
                 const evalTime = Math.round(evalEndTime - evalStartTime);
 
                 const modelDisplayNames = {
-                    gpt4o: 'GPT-4.1',
-                    gpt41: 'GPT-4.1',
-                    claude3: 'Claude 3.7', 
-                    gemini: 'Gemini 2.5'
+                    gpt4o: "GPT-4.1",
+                    gpt41: "GPT-4.1",
+                    claude3: "Claude 3.7",
+                    gemini: "Gemini 2.5",
                 };
                 results.push({
                     model: modelDisplayNames[modelName] || modelName,
@@ -400,8 +502,8 @@ exports.evaluateSet = async (req, res) => {
                     timings: {
                         responseTime,
                         evalTime,
-                        totalTime: responseTime + evalTime
-                    }
+                        totalTime: responseTime + evalTime,
+                    },
                 });
             }
             // Add the question with results to the evaluation set
@@ -409,7 +511,7 @@ exports.evaluateSet = async (req, res) => {
                 question,
                 referenceAnswer,
                 results,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             };
             evaluationsStore.addQuestion(evalSet.id, questionData);
         }
@@ -419,13 +521,14 @@ exports.evaluateSet = async (req, res) => {
         const supabaseId = await exports.saveEvaluationSetToSupabase({
             name: updatedEvalSet.name,
             models: updatedEvalSet.models,
+            systemMessage: updatedEvalSet.systemMessage,
             questions: updatedEvalSet.questions,
             results: updatedEvalSet,
-            timestamp: updatedEvalSet.timestamp
+            timestamp: updatedEvalSet.timestamp,
         });
         res.json({ ...updatedEvalSet, id: supabaseId });
     } catch (err) {
-        console.error('Error during evaluation:', err);
-        res.status(500).json({ message: 'Failed to evaluate questions' });
+        console.error("Error during evaluation:", err);
+        res.status(500).json({ message: "Failed to evaluate questions" });
     }
 };
