@@ -4,27 +4,32 @@
 
 const checkApiKeys = () => {
   const apiKeys = {
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+    // OPENAI_API_KEY: process.env.OPENAI_API_KEY, // No longer primary for mvpController
+    // ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, // No longer used by mvpController
+    // GEMINI_API_KEY: process.env.GEMINI_API_KEY // No longer used by mvpController
   };
   
-  console.log('API Key Status:');
+  console.log('API Key Status (OpenRouter integration):');
   
   // Check key format patterns
   const keyPatterns = {
-    OPENAI_API_KEY: {
-      pattern: /^sk-[a-zA-Z0-9]{32,}$/,
-      example: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+    OPENROUTER_API_KEY: {
+      pattern: /^sk-or-v1-[a-zA-Z0-9]{40,}$/,
+      example: 'sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' // Example format
     },
-    ANTHROPIC_API_KEY: {
-      pattern: /^sk-ant-[a-zA-Z0-9]{32,}$/,
-      example: 'sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-    },
-    GEMINI_API_KEY: {
-      pattern: /^AIza[a-zA-Z0-9_-]{35,}$/,
-      example: 'AIzaXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
-    }
+    // OPENAI_API_KEY: { // Pattern for original OpenAI key, if needed elsewhere
+    //   pattern: /^sk-[a-zA-Z0-9]{32,}$/,
+    //   example: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+    // },
+    // ANTHROPIC_API_KEY: { // Original pattern
+    //   pattern: /^sk-ant-[a-zA-Z0-9]{32,}$/,
+    //   example: 'sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+    // },
+    // GEMINI_API_KEY: { // Original pattern
+    //   pattern: /^AIza[a-zA-Z0-9_-]{35,}$/,
+    //   example: 'AIzaXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+    // }
   };
   
   Object.entries(apiKeys).forEach(([name, key]) => {
@@ -52,13 +57,13 @@ const checkApiKeys = () => {
   });
   
   // Add special note for Anthropic API keys
-  if (apiKeys.ANTHROPIC_API_KEY) {
-    if (!apiKeys.ANTHROPIC_API_KEY.startsWith('sk-ant-')) {
-      console.warn(`ℹ️ Note: Anthropic API keys should start with 'sk-ant-'.`);
-      console.warn(`   If you're using an older Anthropic key or a different format,`);
-      console.warn(`   you may need to create a new key in the Anthropic console.`);
-    }
-  }
+  // if (apiKeys.ANTHROPIC_API_KEY) { // This specific note might no longer be relevant if not using direct Anthropic keys
+  //   if (!apiKeys.ANTHROPIC_API_KEY.startsWith('sk-ant-')) {
+  //     console.warn(`ℹ️ Note: Anthropic API keys should start with 'sk-ant-'.`);
+  //     console.warn(`   If you're using an older Anthropic key or a different format,`);
+  //     console.warn(`   you may need to create a new key in the Anthropic console.`);
+  //   }
+  // }
   
   console.log(''); // Add newline for readability
 };

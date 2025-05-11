@@ -7,29 +7,29 @@ router.get('/demo', (req, res) => {
   res.json({
     message: 'SimpleEvals MVP API Demo',
     endpoints: [
-      { method: 'POST', path: '/api/mvp/evaluate', description: 'Evaluate a single question' },
+      // { method: 'POST', path: '/api/mvp/evaluate', description: 'Evaluate a single question (currently under review)' },
       { method: 'POST', path: '/api/mvp/evaluate-set', description: 'Evaluate multiple questions in batch' },
-      { method: 'GET', path: '/api/mvp/sets', description: 'Get all evaluation sets' },
-      { method: 'GET', path: '/api/mvp/sets/:id', description: 'Get a specific evaluation set' },
-      { method: 'GET', path: '/api/mvp/share/:id', description: 'Get a shareable evaluation set' }
+      { method: 'GET', path: '/api/mvp/sets', description: 'Get all evaluation sets (in-memory)' },
+      { method: 'GET', path: '/api/mvp/sets/:id', description: 'Get a specific evaluation set (in-memory)' },
+      { method: 'GET', path: '/api/mvp/share/:id', description: 'Get a shareable evaluation set (from Supabase)' }
     ],
     timestamp: new Date().toISOString()
   });
 });
 
 // POST /api/mvp/evaluate - Evaluate a single question
-router.post('/evaluate', mvpController.evaluateModels);
+// router.post('/evaluate', mvpController.evaluateModels); // evaluateModels is not in the new module.exports, functionality covered by evaluateSet or evaluateResponse
 
 // POST /api/mvp/evaluate-set - Evaluate multiple questions in batch
 router.post('/evaluate-set', mvpController.evaluateSet);
 
-// GET /api/mvp/sets - Get all evaluation sets
-router.get('/sets', mvpController.getAllEvaluationSets);
+// GET /api/mvp/sets - Get all evaluation sets (from in-memory store)
+router.get('/sets', mvpController.getEvaluationSets); // Was getAllEvaluationSets, changed to getEvaluationSets
 
-// GET /api/mvp/sets/:id - Get a specific evaluation set
+// GET /api/mvp/sets/:id - Get a specific evaluation set (from in-memory store)
 router.get('/sets/:id', mvpController.getEvaluationSet);
 
-// Fetch evaluation set by ID for sharing
-router.get('/share/:id', mvpController.getEvaluationSetById);
+// GET /api/mvp/share/:id - Fetch evaluation set by ID for sharing (from Supabase)
+router.get('/share/:id', mvpController.getSharedEvaluationSet); // Was getEvaluationSetById, now uses the integrated Supabase function
 
 module.exports = router; 
