@@ -329,18 +329,49 @@ exports.getAllEvaluationSets = (req, res) => {
 
 // Save evaluation set to Supabase and return the new ID
 exports.saveEvaluationSetToSupabase = async (evaluationSet) => {
+    // Prepare data to insert, including user_id if present
+    // Sanitize the name by stripping HTML and limiting length
+    let name = evaluationSet.setName || evaluationSet.name || "Unnamed Evaluation";
+    // Basic sanitization: remove HTML tags and trim to reasonable length
+    name = name.replace(/<[^>]*>?/gm, '').trim();
+    name = name.length > 100 ? name.substring(0, 100) : name;
+
+    console.log(`Saving evaluation with name: ${name} to Supabase`);
+
+    const insertData = {
+        name: name,
+        models: evaluationSet.models || [],
+        questions: evaluationSet.questions || [],
+        results: evaluationSet.results || {},
+        created_at: new Date().toISOString(),
+    };
+
+    // Add user_id if it exists in the evaluation set
+    if (evaluationSet.user_id) {
+        insertData.user_id = evaluationSet.user_id;
+        console.log(`User ID attached to evaluation: ${evaluationSet.user_id}`);
+    } else {
+        console.log(`WARNING: No user_id found in evaluation set. User association will not be saved.`);
+        console.log(`Evaluation set contents: ${JSON.stringify({
+            id: evaluationSet.id,
+            name: evaluationSet.name || evaluationSet.setName,
+            timestamp: evaluationSet.timestamp,
+            // Don't log all content to avoid excessive logging
+            hasUserID: !!evaluationSet.user_id
+        })}`);
+    }
+
     const { data, error } = await supabase
         .from("evaluations")
-        .insert({
-            name: evaluationSet.name,
-            models: evaluationSet.models || [],
-            questions: evaluationSet.questions || [],
-            results: evaluationSet.results || {},
-            created_at: new Date().toISOString(),
-        })
+        .insert(insertData)
         .select("id")
         .single();
-    if (error) throw error;
+
+    if (error) {
+        console.error(`Error inserting evaluation into Supabase:`, error);
+        throw error;
+    }
+    console.log(`Successfully saved evaluation to Supabase with ID: ${data.id}`);
     return data.id;
 };
 
@@ -396,10 +427,18 @@ exports.evaluateSet = async (req, res) => {
                 });
             }
         } else {
+            // Add user_id if user is authenticated
+            const userData = req.user ? { user_id: req.user.id } : {};
+
+            // Make sure we capture the name properly
+            const evalName = name && name.trim() !== "" ? name : "Unnamed Evaluation";
+            console.log(`Creating evaluation set with name: ${evalName}`);
+
             evaluationSet = evaluationsStore.create({
-                name: name || "Unnamed Evaluation",
+                name: evalName,
                 // Store the original selection object if needed, or just the names
                 // For now, the frontend will reconstruct selection state if it needs to.
+                ...userData
             });
         }
         
@@ -539,18 +578,83 @@ module.exports = {
     createEvaluationSet: async (req, res) => {
         try {
             const { name } = req.body;
-            
+
             if (!name) {
                 return res.status(400).json({
                     error: "Missing required field (name)",
                 });
             }
-            
-            const newSet = evaluationsStore.create({ name });
-            
+
+            // Add user_id if authenticated
+            const userData = req.user ? { user_id: req.user.id } : {};
+
+            const newSet = evaluationsStore.create({
+                name,
+                ...userData
+            });
+
             return res.json(newSet);
         } catch (error) {
             console.error('Error in createEvaluationSet endpoint:', error.message);
+            return res.status(500).json({ error: error.message });
+        }
+    },
+
+    // Get all evaluation sets for the authenticated user
+    getUserEvaluationSets: async (req, res) => {
+        try {
+            if (!req.user) {
+                return res.status(401).json({ error: "Authentication required" });
+            }
+
+            console.log(`Getting evaluations for user: ${req.user.id}`);
+
+            // Get pagination parameters from query
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 10;
+            const from = (page - 1) * pageSize;
+            const to = from + pageSize - 1;
+
+            console.log(`Pagination: page ${page}, pageSize ${pageSize}, range ${from}-${to}`);
+
+            // Get count of total records first
+            const { count, error: countError } = await supabase
+                .from("evaluations")
+                .select("*", { count: 'exact', head: true })
+                .eq("user_id", req.user.id);
+
+            if (countError) {
+                console.error('Supabase count error:', countError);
+                throw countError;
+            }
+
+            // Get paginated user evaluations directly from Supabase
+            const { data, error } = await supabase
+                .from("evaluations")
+                .select("*")
+                .eq("user_id", req.user.id)
+                .order('created_at', { ascending: false })
+                .range(from, to);
+
+            if (error) {
+                console.error('Supabase error:', error);
+                throw error;
+            }
+
+            console.log(`Found ${data.length} evaluations for user (page ${page} of ${Math.ceil(count/pageSize)})`);
+
+            // Return data with pagination metadata
+            return res.json({
+                data: data,
+                pagination: {
+                    page,
+                    pageSize,
+                    total: count,
+                    totalPages: Math.ceil(count/pageSize)
+                }
+            });
+        } catch (error) {
+            console.error('Error in getUserEvaluationSets endpoint:', error.message);
             return res.status(500).json({ error: error.message });
         }
     },
@@ -629,9 +733,11 @@ module.exports = {
     // Evaluate a set of questions with multiple models
     evaluateSet: async (req, res) => {
         try {
-            const { questions, models: modelNamesToEvaluate, systemMessage, setId, name } = req.body; 
+            const { questions, models: modelNamesToEvaluate, systemMessage, setId, name, setName } = req.body; 
             
-            console.log(`[Eval] Starting evaluation: ${name || 'Unnamed'} (${questions.length} questions) for models: ${modelNamesToEvaluate.join(', ')}`);
+            // Prioritize setName over name for logging
+            const displayName = setName || name || 'Unnamed';
+            console.log(`[Eval] Starting evaluation: "${displayName}" (${questions.length} questions) for models: ${modelNamesToEvaluate.join(', ')}`);
             
             if (!questions || !Array.isArray(questions) || questions.length === 0) {
                 return res.status(400).json({ error: "Missing or invalid questions array" });
@@ -648,8 +754,18 @@ module.exports = {
                     return res.status(404).json({ error: "Evaluation set not found" });
                 }
             } else {
+                // Make sure to include the user ID from the request when creating the set
+                const userData = req.user && req.user.id ? { user_id: req.user.id } : {};
+                console.log(`Creating new evaluation set${req.user ? ' for user ' + req.user.id : ' without user'}`);
+
+                // Prioritize setName over name and log the actual name being used
+                const evalName = setName || name || "Unnamed Evaluation";
+                console.log(`Creating new evaluation set with name: "${evalName}"`);
+
                 evaluationSet = evaluationsStore.create({
-                    name: name || "Unnamed Evaluation",
+                    name: evalName,
+                    setName: evalName, // Store in both fields for consistency
+                    ...userData
                 });
             }
             
@@ -708,8 +824,38 @@ module.exports = {
                 });
             }
             
+            // Get the updated set from in-memory store
             const updatedSet = evaluationsStore.get(evaluationSet.id);
             console.log(`[Eval] Completed evaluation: ${updatedSet.name} (ID: ${updatedSet.id})`);
+
+            try {
+                // Save to Supabase for persistence
+                console.log(`Saving evaluation to Supabase...`);
+
+                // Make sure to include the user ID from the request if not already present
+                if (req.user && req.user.id) {
+                    if (!updatedSet.user_id) {
+                        updatedSet.user_id = req.user.id;
+                        console.log(`User ID from request added to set: ${req.user.id}`);
+                    } else if (updatedSet.user_id !== req.user.id) {
+                        console.log(`WARNING: User ID mismatch in evaluation set!`);
+                        console.log(`Set has user_id ${updatedSet.user_id} but request has user_id ${req.user.id}`);
+                        // We'll keep the original user_id to maintain data integrity
+                    }
+                } else {
+                    console.log(`No user ID available from request`);
+                }
+
+                const supabaseId = await exports.saveEvaluationSetToSupabase(updatedSet);
+                console.log(`Saved to Supabase with ID: ${supabaseId}`);
+
+                // Update the ID if it came from Supabase
+                updatedSet.supabaseId = supabaseId;
+            } catch (supabaseError) {
+                console.error('Error saving to Supabase:', supabaseError.message);
+                // Continue with the response even if Supabase save fails
+            }
+
             return res.json(updatedSet);
         } catch (error) {
             console.error('Error in evaluateSet endpoint:', error.message);

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mvpController = require('../controllers/mvpController');
+const { verifyAuth, requireAuth } = require('../middleware/auth');
 
 // GET /api/mvp/demo - Demo endpoint
 router.get('/demo', (req, res) => {
@@ -21,13 +22,17 @@ router.get('/demo', (req, res) => {
 // router.post('/evaluate', mvpController.evaluateModels); // evaluateModels is not in the new module.exports, functionality covered by evaluateSet or evaluateResponse
 
 // POST /api/mvp/evaluate-set - Evaluate multiple questions in batch
-router.post('/evaluate-set', mvpController.evaluateSet);
+router.post('/evaluate-set', verifyAuth, mvpController.evaluateSet);
 
 // GET /api/mvp/sets - Get all evaluation sets (from in-memory store)
-router.get('/sets', mvpController.getEvaluationSets); // Was getAllEvaluationSets, changed to getEvaluationSets
+// Currently available to all, but we track the user if authenticated
+router.get('/sets', verifyAuth, mvpController.getEvaluationSets);
 
 // GET /api/mvp/sets/:id - Get a specific evaluation set (from in-memory store)
-router.get('/sets/:id', mvpController.getEvaluationSet);
+router.get('/sets/:id', verifyAuth, mvpController.getEvaluationSet);
+
+// GET /api/mvp/user/sets - Get evaluation sets for the authenticated user
+router.get('/user/sets', requireAuth, mvpController.getUserEvaluationSets);
 
 // GET /api/mvp/share/:id - Fetch evaluation set by ID for sharing (from Supabase)
 router.get('/share/:id', mvpController.getSharedEvaluationSet); // Was getEvaluationSetById, now uses the integrated Supabase function
