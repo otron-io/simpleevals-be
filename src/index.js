@@ -91,6 +91,6 @@ const evaluateLimiter = rateLimit({
 app.use('/api/', apiLimiter); // General API rate limit
 app.use('/api/mvp/evaluate-set', evaluateLimiter); // Stricter limit for evaluations
 
-app.listen(port, () => {
-  console.log(`Server listening at http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Server listening at http://0.0.0.0:${port}`);
 }); 
