@@ -327,23 +327,85 @@ exports.getAllEvaluationSets = (req, res) => {
     res.json(evalSets);
 };
 
+// Helper function to prepare evaluation for Supabase by ensuring consistent format
+const prepareEvaluationForSupabase = (evaluation) => {
+    // Create a clean copy without any circular references or non-serializable fields
+    const cleanEvaluation = JSON.parse(JSON.stringify({
+        id: evaluation.id,
+        name: evaluation.name || evaluation.setName || "Unnamed Evaluation",
+        user_id: evaluation.user_id || null,
+        models: evaluation.models || [],
+        questions: evaluation.questions || [],
+        results: evaluation.results || {},
+        created_at: evaluation.created_at || evaluation.timestamp || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        evaluate_automatically: evaluation.evaluate_automatically !== false
+    }));
+    
+    return cleanEvaluation;
+};
+
+// Helper function to check if an evaluation with given id exists in Supabase
+const checkEvaluationInSupabase = async (id) => {
+    if (!id) return null;
+    
+    try {
+        // Check if the ID looks like a UUID (standard UUID format check)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        
+        // If it's not a UUID, it can't be in Supabase (Supabase uses UUIDs)
+        if (!uuidRegex.test(id)) {
+            console.log(`ID ${id} is not a UUID format - not in Supabase`);
+            return null;
+        }
+        
+        // If it looks like a UUID, check if it exists in Supabase
+        const { data, error } = await supabase
+            .from("evaluations")
+            .select("id, created_at")
+            .eq("id", id)
+            .single();
+            
+        if (error) {
+            // If it's an RLS error, that means the record exists but we can't see it
+            if (error.code === 'PGRST301') {
+                console.log(`Evaluation exists in Supabase but is protected by RLS: ${id}`);
+                return { id, rls_protected: true };
+            }
+            
+            console.error(`Error checking evaluation in Supabase: ${error.message}`);
+            return null;
+        }
+        
+        return data;
+    } catch (error) {
+        console.error(`Error in checkEvaluationInSupabase: ${error.message}`);
+        return null;
+    }
+};
+
 // Save evaluation set to Supabase and return the new ID
 exports.saveEvaluationSetToSupabase = async (evaluationSet) => {
-    // Prepare data to insert, including user_id if present
+    // Prepare a clean evaluation object for Supabase
+    const preparedEvaluation = prepareEvaluationForSupabase(evaluationSet);
+    
     // Sanitize the name by stripping HTML and limiting length
-    let name = evaluationSet.setName || evaluationSet.name || "Unnamed Evaluation";
-    // Basic sanitization: remove HTML tags and trim to reasonable length
+    let name = preparedEvaluation.name;
     name = name.replace(/<[^>]*>?/gm, '').trim();
     name = name.length > 100 ? name.substring(0, 100) : name;
+    preparedEvaluation.name = name;
 
     console.log(`Saving evaluation with name: ${name} to Supabase`);
 
     const insertData = {
         name: name,
-        models: evaluationSet.models || [],
-        questions: evaluationSet.questions || [],
-        results: evaluationSet.results || {},
-        created_at: new Date().toISOString(),
+        models: preparedEvaluation.models,
+        questions: preparedEvaluation.questions,
+        results: preparedEvaluation.results,
+        created_at: preparedEvaluation.created_at,
+        // updated_at will be set by DEFAULT now() in the database
+        evaluate_automatically: preparedEvaluation.evaluate_automatically,
+        user_id: preparedEvaluation.user_id
     };
 
     // Add user_id if it exists in the evaluation set
@@ -379,14 +441,52 @@ exports.saveEvaluationSetToSupabase = async (evaluationSet) => {
 const getEvaluationSetByIdFromSupabase = async (req, res) => {
     const { id } = req.params;
     try {
+        // Check if the ID looks like a UUID (standard UUID format check)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        
+        // If it's not a UUID, check the local store instead
+        if (!uuidRegex.test(id)) {
+            console.log(`ID ${id} is not a UUID format - checking in-memory store`);
+            
+            // Try to get from in-memory store
+            const localSet = evaluationsStore.get(id);
+            
+            if (localSet) {
+                // Check if this evaluation has a Supabase ID
+                if (localSet.supabaseId) {
+                    console.log(`Found local evaluation with Supabase ID: ${localSet.supabaseId}`);
+                    
+                    // Try to get the record from Supabase using the stored supabaseId
+                    const { data: supabaseData, error: supabaseError } = await supabase
+                        .from("evaluations")
+                        .select("*")
+                        .eq("id", localSet.supabaseId)
+                        .single();
+                        
+                    if (!supabaseError && supabaseData) {
+                        return res.json(supabaseData);
+                    }
+                }
+                
+                // If we couldn't get from Supabase or there's no supabaseId, return the local data
+                return res.json(localSet);
+            }
+            
+            // Not found in either storage
+            return res.status(404).json({ message: "Evaluation not found" });
+        }
+        
+        // For UUID format, check Supabase directly
         const { data, error } = await supabase
             .from("evaluations")
             .select("*")
             .eq("id", id)
             .single();
+            
         if (error || !data) {
             return res.status(404).json({ message: "Evaluation not found" });
         }
+        
         res.json(data);
     } catch (err) {
         console.error("Error fetching evaluation from Supabase:", err);
@@ -512,8 +612,211 @@ exports.evaluateSet = async (req, res) => {
     }
 };
 
+// Manually evaluate a response
+exports.manuallyEvaluateResponse = async (req, res) => {
+    try {
+        const { evaluationId, questionIndex, modelName, isCorrect, reasoning } = req.body;
+        
+        console.log(`[ManualEval] User ${req.user ? req.user.id : 'unknown'} is manually evaluating set ${evaluationId}, question ${questionIndex}, model ${modelName}`);
+        
+        // Validate required parameters
+        if (!evaluationId || questionIndex === undefined || !modelName || isCorrect === undefined) {
+            return res.status(400).json({
+                error: "Missing required fields (evaluationId, questionIndex, modelName, isCorrect)"
+            });
+        }
+        
+        let evaluationSet = null;
+        let storedInSupabase = false;
+        
+        // First check if the ID exists in Supabase
+        const supabaseRecord = await checkEvaluationInSupabase(evaluationId);
+        
+        if (supabaseRecord) {
+            console.log(`[ManualEval] Found evaluation in Supabase with ID: ${evaluationId}`);
+            // This is a Supabase ID, fetch the full data
+            const { data, error } = await supabase
+                .from("evaluations")
+                .select("*")
+                .eq("id", evaluationId)
+                .single();
+                
+            if (error) {
+                console.error(`[ManualEval] Error fetching evaluation from Supabase: ${error.message}`);
+                return res.status(500).json({
+                    error: `Failed to retrieve evaluation data: ${error.message}`
+                });
+            }
+            
+            if (!data) {
+                return res.status(404).json({
+                    error: "Evaluation set not found in Supabase"
+                });
+            }
+            
+            evaluationSet = data;
+            storedInSupabase = true;
+        } else {
+            // Try to load from in-memory store
+            evaluationSet = evaluationsStore.get(evaluationId);
+            
+            if (!evaluationSet) {
+                return res.status(404).json({
+                    error: "Evaluation set not found in local store or Supabase"
+                });
+            }
+            
+            console.log(`[ManualEval] Found evaluation in local store with ID: ${evaluationId}`);
+        }
+        
+        // Verify user is owner of the evaluation (if user auth is available)
+        if (req.user && evaluationSet.user_id && req.user.id !== evaluationSet.user_id) {
+            return res.status(403).json({
+                error: "You are not authorized to evaluate this set"
+            });
+        }
+        
+        // Check if the question index is valid
+        if (!evaluationSet.questions || !evaluationSet.questions[questionIndex]) {
+            return res.status(404).json({
+                error: "Question not found in evaluation set"
+            });
+        }
+        
+        // Find the model result to update
+        const question = evaluationSet.questions[questionIndex];
+        const modelResult = question.results.find(r => r.model === modelName);
+        
+        if (!modelResult) {
+            return res.status(404).json({
+                error: "Model result not found for this question"
+            });
+        }
+        
+        // Update the evaluation result
+        modelResult.evaluation = {
+            is_correct: isCorrect,
+            reasoning: reasoning || "Manually evaluated by user.",
+            evaluation_type: "manual",
+            evaluated_by: req.user ? req.user.id : null,
+            evaluated_at: new Date().toISOString()
+        };
+        
+        // Always update the in-memory store
+        evaluationsStore.items.set(evaluationId, evaluationSet);
+        
+        // Check if this ID has a UUID format (Supabase uses UUIDs)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const isUuidFormat = uuidRegex.test(evaluationId);
+        
+        // For non-UUID IDs, we should save to Supabase as a new record
+        if (!isUuidFormat) {
+            console.log(`[ManualEval] ID ${evaluationId} is not a UUID format - will create new record in Supabase`);
+            try {
+                // Create a new evaluation in Supabase
+                console.log(`[ManualEval] Saving evaluation to Supabase as a new record...`);
+                const supabaseId = await exports.saveEvaluationSetToSupabase(evaluationSet);
+                console.log(`[ManualEval] Saved to Supabase with ID: ${supabaseId}`);
+                
+                // Update the in-memory store with the new Supabase ID
+                evaluationSet.supabaseId = supabaseId;
+                evaluationsStore.items.set(evaluationId, evaluationSet);
+                
+                // Continue with normal flow - no need to update Supabase again
+                return res.json({
+                    success: true,
+                    evaluation: modelResult.evaluation,
+                    supabaseId
+                });
+            } catch (error) {
+                console.error(`[ManualEval] Error saving to Supabase: ${error.message}`);
+                // Continue with response even if Supabase save fails
+            }
+        }
+        
+        // If it's from Supabase, update there directly
+        if (storedInSupabase) {
+            try {
+                console.log(`[ManualEval] Saving changes directly to Supabase...`);
+                
+                // Prepare a clean evaluation object for Supabase
+                const preparedEvaluation = prepareEvaluationForSupabase(evaluationSet);
+                console.log(`[ManualEval] Updating Supabase record with ID: ${evaluationId}`);
+                
+                // Update the evaluation in Supabase - only update the questions array
+                const { error: updateError } = await supabase
+                    .from("evaluations")
+                    .update({ 
+                        questions: preparedEvaluation.questions,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq("id", evaluationId);
+                    
+                if (updateError) {
+                    console.error(`[ManualEval] Error updating Supabase: ${updateError.message}`);
+                    throw updateError;
+                }
+                
+                console.log(`[ManualEval] Successfully updated evaluation in Supabase`);
+            } catch (dbError) {
+                console.error(`[ManualEval] Error updating Supabase: ${dbError.message}`);
+                // Continue even if Supabase update fails
+            }
+        } else {
+            // Otherwise, save to Supabase as a new record if no supabaseId exists
+            try {
+                if (!evaluationSet.supabaseId) {
+                    console.log(`[ManualEval] Saving evaluation to Supabase as a new record...`);
+                    const supabaseId = await exports.saveEvaluationSetToSupabase(evaluationSet);
+                    console.log(`[ManualEval] Saved to Supabase with ID: ${supabaseId}`);
+                    
+                    // Update the in-memory store with the new Supabase ID
+                    evaluationSet.supabaseId = supabaseId;
+                    evaluationsStore.items.set(evaluationId, evaluationSet);
+                } else {
+                    // We have a supabaseId, try to update that record
+                    console.log(`[ManualEval] Updating existing Supabase record with ID: ${evaluationSet.supabaseId}`);
+                    
+                    // Prepare a clean evaluation object for Supabase
+                    const preparedEvaluation = prepareEvaluationForSupabase(evaluationSet);
+                    console.log(`[ManualEval] Updating Supabase record with ID: ${evaluationSet.supabaseId}`);
+                    
+                    const { error: updateError } = await supabase
+                        .from("evaluations")
+                        .update({ 
+                            questions: preparedEvaluation.questions,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq("id", evaluationSet.supabaseId);
+                        
+                    if (updateError) {
+                        console.error(`[ManualEval] Error updating Supabase: ${updateError.message}`);
+                        throw updateError;
+                    }
+                    
+                    console.log(`[ManualEval] Successfully updated existing Supabase record`);
+                }
+            } catch (dbError) {
+                console.error(`[ManualEval] Error saving to Supabase: ${dbError.message}`);
+                // Continue even if Supabase update fails
+            }
+        }
+        
+        return res.json({
+            success: true,
+            evaluation: modelResult.evaluation
+        });
+    } catch (error) {
+        console.error('Error in manuallyEvaluateResponse endpoint:', error.message);
+        return res.status(500).json({ error: error.message });
+    }
+};
+
 // MVP endpoints
 module.exports = {
+    // Manually evaluate a response
+    manuallyEvaluateResponse: exports.manuallyEvaluateResponse,
+    
     // Evaluate a single response
     evaluateResponse: async (req, res) => {
         try {
@@ -720,6 +1023,46 @@ module.exports = {
                 });
             }
             
+            // Check for the debug parameter to help diagnose Supabase issues
+            const debug = req.query.debug === 'true';
+            if (debug) {
+                const supabaseRecord = await checkEvaluationInSupabase(id);
+                const hasSupabaseRecord = !!supabaseRecord;
+                
+                // If we have both local and Supabase records, add debug info
+                if (hasSupabaseRecord) {
+                    // Get the full Supabase record for comparison
+                    const { data, error } = await supabase
+                        .from("evaluations")
+                        .select("*")
+                        .eq("id", id)
+                        .single();
+                    
+                    if (!error && data) {
+                        return res.json({
+                            local: set,
+                            supabase: data,
+                            _debug: {
+                                localQuestionCount: set.questions?.length || 0,
+                                supabaseQuestionCount: data.questions?.length || 0,
+                                supabaseId: set.supabaseId || null,
+                                hasMatchingId: id === data.id
+                            }
+                        });
+                    }
+                }
+                
+                // If we only have local record, add that info
+                return res.json({
+                    local: set,
+                    supabase: null,
+                    _debug: {
+                        inSupabase: hasSupabaseRecord,
+                        supabaseId: set.supabaseId || null
+                    }
+                });
+            }
+            
             return res.json(set);
         } catch (error) {
             console.error('Error in getEvaluationSet endpoint:', error.message);
@@ -733,11 +1076,12 @@ module.exports = {
     // Evaluate a set of questions with multiple models
     evaluateSet: async (req, res) => {
         try {
-            const { questions, models: modelNamesToEvaluate, systemMessage, setId, name, setName } = req.body; 
+            const { questions, models: modelNamesToEvaluate, systemMessage, setId, name, setName, evaluateAutomatically } = req.body; 
             
             // Prioritize setName over name for logging
             const displayName = setName || name || 'Unnamed';
             console.log(`[Eval] Starting evaluation: "${displayName}" (${questions.length} questions) for models: ${modelNamesToEvaluate.join(', ')}`);
+            console.log(`[Eval] Automatic evaluation: ${evaluateAutomatically !== false ? 'enabled' : 'disabled'}`);
             
             if (!questions || !Array.isArray(questions) || questions.length === 0) {
                 return res.status(400).json({ error: "Missing or invalid questions array" });
@@ -765,6 +1109,7 @@ module.exports = {
                 evaluationSet = evaluationsStore.create({
                     name: evalName,
                     setName: evalName, // Store in both fields for consistency
+                    evaluate_automatically: evaluateAutomatically !== false, // Store evaluation preference
                     ...userData
                 });
             }
@@ -790,26 +1135,52 @@ module.exports = {
                     const responseEndTime = Date.now(); // End timing for response
                     const responseTime = responseEndTime - responseStartTime;
                     
-                    const evalStartTime = Date.now(); // Start timing for evaluation
-                    const evaluationResult = await evaluateResponse(
-                        question,
-                        referenceAnswer,
-                        responseContent
-                    );
-                    const evalEndTime = Date.now(); // End timing for evaluation
-                    const evalTime = evalEndTime - evalStartTime;
-                    
-                    questionResultsArray.push({
-                        model: modelDisplayNames[modelName] || modelName,
-                        response: responseContent,
-                        evaluation: evaluationResult,
-                        timings: {
-                            responseTime: responseTime,
-                            evaluationTime: evalTime,
-                            totalTime: responseTime + evalTime,
-                        }
-                    });
-                    console.log(`[Eval] ${modelName} response processed and evaluated in ${responseTime + evalTime}ms`);
+                    // Only evaluate automatically if the flag is true (default)
+                    if (evaluateAutomatically !== false) {
+                        const evalStartTime = Date.now(); // Start timing for evaluation
+                        const evaluationResult = await evaluateResponse(
+                            question,
+                            referenceAnswer,
+                            responseContent
+                        );
+                        const evalEndTime = Date.now(); // End timing for evaluation
+                        const evalTime = evalEndTime - evalStartTime;
+                        
+                        questionResultsArray.push({
+                            model: modelDisplayNames[modelName] || modelName,
+                            response: responseContent,
+                            evaluation: {
+                                ...evaluationResult,
+                                evaluation_type: "automatic",
+                                evaluated_at: new Date().toISOString()
+                            },
+                            timings: {
+                                responseTime: responseTime,
+                                evaluationTime: evalTime,
+                                totalTime: responseTime + evalTime,
+                            }
+                        });
+                        console.log(`[Eval] ${modelName} response processed and evaluated in ${responseTime + evalTime}ms`);
+                    } else {
+                        // Skip evaluation, store null evaluation for manual assessment later
+                        questionResultsArray.push({
+                            model: modelDisplayNames[modelName] || modelName,
+                            response: responseContent,
+                            evaluation: {
+                                is_correct: null,
+                                reasoning: null,
+                                evaluation_type: "pending_manual",
+                                evaluated_at: null,
+                                evaluated_by: null
+                            },
+                            timings: {
+                                responseTime: responseTime,
+                                evaluationTime: 0,
+                                totalTime: responseTime
+                            }
+                        });
+                        console.log(`[Eval] ${modelName} response processed (pending manual evaluation) in ${responseTime}ms`);
+                    }
                 }
                 
                 const modelsSelectionForStorage = {};

@@ -37,4 +37,7 @@ router.get('/user/sets', requireAuth, mvpController.getUserEvaluationSets);
 // GET /api/mvp/share/:id - Fetch evaluation set by ID for sharing (from Supabase)
 router.get('/share/:id', mvpController.getSharedEvaluationSet); // Was getEvaluationSetById, now uses the integrated Supabase function
 
+// POST /api/mvp/sets/:id/evaluate - Manually evaluate a response
+router.post('/sets/:id/evaluate', requireAuth, mvpController.manuallyEvaluateResponse);
+
 module.exports = router; 
