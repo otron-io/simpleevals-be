@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mvpController = require('../controllers/mvpController');
+const { AVAILABLE_MODELS } = require("../lib/models");
 const { verifyAuth, requireAuth } = require('../middleware/auth');
 
 // GET /api/mvp/demo - Demo endpoint
@@ -10,6 +11,7 @@ router.get('/demo', (req, res) => {
     endpoints: [
       // { method: 'POST', path: '/api/mvp/evaluate', description: 'Evaluate a single question (currently under review)' },
       { method: 'POST', path: '/api/mvp/evaluate-set', description: 'Evaluate multiple questions in batch' },
+        { method: 'GET', path: '/api/mvp/models', description: 'List available models' },
       { method: 'GET', path: '/api/mvp/sets', description: 'Get all evaluation sets (in-memory)' },
       { method: 'GET', path: '/api/mvp/sets/:id', description: 'Get a specific evaluation set (in-memory)' },
       { method: 'GET', path: '/api/mvp/share/:id', description: 'Get a shareable evaluation set (from Supabase)' }
@@ -17,6 +19,7 @@ router.get('/demo', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+router.get("/models", (req, res) => { res.json(AVAILABLE_MODELS); });
 
 // POST /api/mvp/evaluate - Evaluate a single question
 // router.post('/evaluate', mvpController.evaluateModels); // evaluateModels is not in the new module.exports, functionality covered by evaluateSet or evaluateResponse

@@ -5,6 +5,7 @@ const memoryCache = require("memory-cache");
 const { createClient } = require("@supabase/supabase-js");
 
 // Simple in-memory storage for evaluations
+const { AVAILABLE_MODELS, getOpenRouterSlug, getDisplayName } = require("../lib/models");
 const evaluationsStore = {
     // Map to store evaluation sets by ID
     items: new Map(),
@@ -116,21 +117,13 @@ Your evaluation must be strict but fair, focusing only on correctness of informa
 
 // Function to get response from a model (now using OpenRouter)
 const getModelResponse = async (modelName, question, systemMessage = "") => {
-    let openRouterModelSlug = "";
+    const openRouterModelSlug = getOpenRouterSlug(modelName);
     let effectiveSystemMessage = systemMessage;
 
-    // Map internal model names to OpenRouter model slugs
-    if (modelName === "gpt41" || modelName === "gpt4o") { // gpt4o was an alias for gpt41 previously
-        openRouterModelSlug = "openai/gpt-4.1"; 
-    } else if (modelName === "claude3") {
-        openRouterModelSlug = "anthropic/claude-3.7-sonnet";
-    } else if (modelName === "gemini") {
-        openRouterModelSlug = "google/gemini-2.5-pro-preview";
-    } else {
+    if (!openRouterModelSlug) {
         console.warn(`Unsupported model requested for OpenRouter: ${modelName}`);
         return `Model ${modelName} not supported via OpenRouter in this configuration.`;
     }
-
     try {
         const messages = [];
 
@@ -256,7 +249,7 @@ exports.evaluateModels = async (req, res) => {
             };
 
             results.push({
-                model: modelDisplayNames[modelName] || modelName,
+                model: getDisplayName(modelName),
                 response: response,
                 evaluation: evaluation,
             });
@@ -573,7 +566,7 @@ exports.evaluateSet = async (req, res) => {
                 const evalTime = evalEndTime - evalStartTime;
                 
                 questionResultsArray.push({
-                    model: modelDisplayNames[modelName] || modelName,
+                    model: getDisplayName(modelName),
                     response: responseContent,
                     evaluation: evaluationResult,
                     timings: {
@@ -1147,7 +1140,7 @@ module.exports = {
                         const evalTime = evalEndTime - evalStartTime;
                         
                         questionResultsArray.push({
-                            model: modelDisplayNames[modelName] || modelName,
+                            model: getDisplayName(modelName),
                             response: responseContent,
                             evaluation: {
                                 ...evaluationResult,
@@ -1164,7 +1157,7 @@ module.exports = {
                     } else {
                         // Skip evaluation, store null evaluation for manual assessment later
                         questionResultsArray.push({
-                            model: modelDisplayNames[modelName] || modelName,
+                            model: getDisplayName(modelName),
                             response: responseContent,
                             evaluation: {
                                 is_correct: null,
