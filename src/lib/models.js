@@ -17,6 +17,12 @@ const AVAILABLE_MODELS = {
   }
 };
 
+/**
+ * Retrieves the slug for the specified model name.
+ *
+ * @param {string} name - The name of the model (e.g., 'gpt4o', 'gpt41', 'claude3', 'gemini').
+ * @returns {string|null} The slug associated with the model name, or null if the name is unsupported.
+ */
 function getOpenRouterSlug(name) {
   return AVAILABLE_MODELS[name] ? AVAILABLE_MODELS[name].slug : null;
 }
