@@ -60,7 +60,7 @@ const testAnthropic = async () => {
 
     // Test first without system message
     const response1 = await anthropic.messages.create({
-      model: "claude-3-7-sonnet-latest", // Use the same model as in production
+      model: "claude-sonnet-4", // Use the same model as in production
       max_tokens: 100,
       messages: [
         { role: "user", content: TEST_QUESTION }
@@ -72,7 +72,7 @@ const testAnthropic = async () => {
 
     // Test with system message
     const response2 = await anthropic.messages.create({
-      model: "claude-3-7-sonnet-latest", // Use the same model as in production
+      model: "claude-sonnet-4", // Use the same model as in production
       max_tokens: 100,
       messages: [
         { role: "system", content: TEST_SYSTEM_MESSAGE },

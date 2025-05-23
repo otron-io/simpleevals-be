@@ -8,8 +8,8 @@ const AVAILABLE_MODELS = {
     display: 'GPT-4.1'
   },
   claude3: {
-    slug: 'anthropic/claude-3.7-sonnet',
-    display: 'Claude 3.7'
+    slug: 'anthropic/claude-sonnet-4',
+    display: 'Claude Sonnet 4'
   },
   gemini: {
     slug: 'google/gemini-2.5-pro-preview',
