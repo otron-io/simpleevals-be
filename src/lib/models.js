@@ -12,8 +12,8 @@ const AVAILABLE_MODELS = {
     display: 'Claude Sonnet 4'
   },
   gemini: {
-    slug: 'google/gemini-2.5-pro-preview',
-    display: 'Gemini 2.5'
+    slug: 'google/gemini-2.5-flash-preview-05-20',
+    display: 'Gemini 2.5 Flash'
   }
 };
 
