@@ -244,7 +244,7 @@ exports.evaluateModels = async (req, res) => {
             const modelDisplayNames = {
                 gpt4o: "GPT-4.1",
                 gpt41: "GPT-4.1",
-                claude3: "Claude 3.7",
+                claude3: "Claude Sonnet 4",
                 gemini: "Gemini 2.5",
             };
 
@@ -538,7 +538,7 @@ exports.evaluateSet = async (req, res) => {
         const modelDisplayNames = {
             gpt4o: "GPT-4.1", 
             gpt41: "GPT-4.1",
-            claude3: "Claude 3.7",
+            claude3: "Claude Sonnet 4",
             gemini: "Gemini 2.5",
         };
 
@@ -1110,7 +1110,7 @@ module.exports = {
             const modelDisplayNames = {
                 gpt4o: "GPT-4.1", 
                 gpt41: "GPT-4.1",
-                claude3: "Claude 3.7",
+                claude3: "Claude Sonnet 4",
                 gemini: "Gemini 2.5",
             };
 

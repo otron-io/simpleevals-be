@@ -9,7 +9,7 @@ const sampleEvaluationSet = {
       referenceAnswer: 'Reading a book in a quiet room is the ultimate way to unwind.',
       results: [
         { model: 'GPT-4o', response: 'Take a walk in nature.', evaluation: { is_correct: false, reasoning: 'Different method than reference.' } },
-        { model: 'Claude 3.7', response: 'Reading a book in a quiet room is the ultimate way to unwind.', evaluation: { is_correct: true, reasoning: 'Matches reference answer.' } },
+        { model: 'Claude Sonnet 4', response: 'Reading a book in a quiet room is the ultimate way to unwind.', evaluation: { is_correct: true, reasoning: 'Matches reference answer.' } },
         { model: 'Gemini 2.5', response: 'Meditation is best.', evaluation: { is_correct: false, reasoning: 'Does not match reference.' } }
       ],
       timestamp: new Date().toISOString()
